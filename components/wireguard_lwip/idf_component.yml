@@ -1,0 +1,6 @@
+version: "0.1.0-esp32-tailnet.1"
+description: "WireGuard lwIP transport bundled for MicroLink"
+license: "BSD-3-Clause"
+dependencies:
+  idf: ">=5.3,<6.0"
+

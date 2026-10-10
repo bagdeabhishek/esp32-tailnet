@@ -1,0 +1,8 @@
+version: "0.1.0"
+description: "Arduino adapter for esp32-tailnet"
+license: "MIT"
+dependencies:
+  idf: ">=5.3,<6.0"
+  esp32_tailnet:
+    path: ../esp32_tailnet
+    require: public

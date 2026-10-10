@@ -1,0 +1,3 @@
+dependencies:
+  esp32_tailnet_arduino:
+    path: ../../../components/esp32_tailnet_arduino

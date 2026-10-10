@@ -1,0 +1,13 @@
+version: "0.1.0"
+description: "Framework-neutral Tailscale-compatible tailnet lifecycle for ESP32"
+license: "MIT"
+tags:
+  - networking
+  - vpn
+  - wireguard
+  - tailscale
+dependencies:
+  idf: ">=5.3,<6.0"
+  microlink:
+    path: ../microlink
+    require: public

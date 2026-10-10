@@ -1,0 +1,29 @@
+ESP32 Tailnet third-party notices
+=================================
+
+MicroLink
+---------
+This repository contains a modified MicroLink snapshot from:
+https://github.com/Csontikka/esphome-tailscale
+Pinned source commit: f41c18d
+Upstream project: https://github.com/cmalone314/microlink
+Copyright (c) 2025-2026 Cameron Malone
+License: MIT. See components/microlink/LICENSE.
+
+WireGuard for lwIP
+------------------
+Source lineage: https://github.com/smartalock/wireguard-lwip
+Copyright (c) 2021 Daniel Hope (www.floorsense.nz)
+License: BSD 3-Clause. See components/wireguard_lwip/LICENSE.
+
+X25519
+------
+The X25519 implementation includes code made available under the terms in
+components/microlink/x25519-license.txt and
+components/wireguard_lwip/src/crypto/refc/x25519-license.txt.
+
+Trademarks
+----------
+Tailscale is a trademark of Tailscale Inc. WireGuard is a registered trademark
+of Jason A. Donenfeld. ESP32 Tailnet is independent and is not affiliated with
+or endorsed by Tailscale Inc.

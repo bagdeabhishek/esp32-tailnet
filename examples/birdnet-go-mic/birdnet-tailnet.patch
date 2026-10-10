@@ -1,0 +1,311 @@
+diff --git a/.gitignore b/.gitignore
+index eaf2c9a..e7f7faf 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -6,3 +6,9 @@ scripts/
+ tmp/
+ .pio/
+ compile_commands.json
++managed_components/
++dependencies.lock
++sdkconfig
++sdkconfig.*
++!sdkconfig.defaults
++esp32-birdnet-mic/TailnetSecrets.h
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+new file mode 100644
+index 0000000..6ed15eb
+--- /dev/null
++++ b/CMakeLists.txt
+@@ -0,0 +1,4 @@
++cmake_minimum_required(VERSION 3.16)
++
++include($ENV{IDF_PATH}/tools/cmake/project.cmake)
++project(m5stack_atom_voices3r_birdnet_mic)
+diff --git a/esp32-birdnet-mic/CMakeLists.txt b/esp32-birdnet-mic/CMakeLists.txt
+new file mode 100644
+index 0000000..b496a98
+--- /dev/null
++++ b/esp32-birdnet-mic/CMakeLists.txt
+@@ -0,0 +1,4 @@
++idf_component_register(
++    SRCS "esp32-birdnet-mic.cpp" "WebUI.cpp"
++    INCLUDE_DIRS "."
++)
+diff --git a/esp32-birdnet-mic/TailnetSecrets.h.example b/esp32-birdnet-mic/TailnetSecrets.h.example
+new file mode 100644
+index 0000000..c936e16
+--- /dev/null
++++ b/esp32-birdnet-mic/TailnetSecrets.h.example
+@@ -0,0 +1,5 @@
++#pragma once
++
++// Use a tagged, short-lived or one-time key and never commit the real value.
++#define TAILNET_AUTH_KEY "replace-with-auth-key"
++#define TAILNET_HOSTNAME "birdnet-mic"
+diff --git a/esp32-birdnet-mic/WebUI.cpp b/esp32-birdnet-mic/WebUI.cpp
+index 60156ee..bc01678 100644
+--- a/esp32-birdnet-mic/WebUI.cpp
++++ b/esp32-birdnet-mic/WebUI.cpp
+@@ -12,6 +12,8 @@
+ #include "WebUI.h"
+ #include "WebUI_gz.h"
+ 
++extern IPAddress serviceIP();
++
+ // External variables and functions from main (.ino) – ESP32 RTSP Mic for BirdNET-Go / BirdNET-Pi
+ extern WiFiServer rtspServer;
+ extern WiFiClient rtspClient;
+@@ -274,7 +276,7 @@ static String htmlEscape(const String &s) {
+ }
+ 
+ static void sendOtaPage(const String &message = String(), bool ok = true) {
+-    String deviceUrl = "http://" + WiFi.localIP().toString() + "/ota";
++    String deviceUrl = "http://" + serviceIP().toString() + "/ota";
+     String defaultOtaUrl = getDefaultOtaUrl();
+     bool versionChecked = false;
+     bool versionChecking = false;
+@@ -835,11 +837,12 @@ static void httpStatus() {
+     json += "\"chip_family\":\"" + jsonEscape(String(FW_CHIP_FAMILY_STR)) + "\",";
+     json += "\"ota_artifact\":\"" + jsonEscape(String(FW_OTA_ARTIFACT_STR)) + "\",";
+     json += "\"ota_auto_supported\":" + String(FW_OTA_ARTIFACT_STR[0] ? "true" : "false") + ",";
+-    json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
+-    json += "\"stream_url_ip\":\"rtsp://" + WiFi.localIP().toString() + ":8554/audio1\",";
++    json += "\"ip\":\"" + serviceIP().toString() + "\",";
++    json += "\"lan_ip\":\"" + WiFi.localIP().toString() + "\",";
++    json += "\"stream_url_ip\":\"rtsp://" + serviceIP().toString() + ":8554/audio1\",";
+     json += "\"stream_url_mdns\":\"rtsp://" + mdnsHostname + ".local:8554/audio1\",";
+-    json += "\"stream1_url_ip\":\"rtsp://" + WiFi.localIP().toString() + ":8554/audio1\",";
+-    json += "\"stream2_url_ip\":\"rtsp://" + WiFi.localIP().toString() + ":8554/audio2\",";
++    json += "\"stream1_url_ip\":\"rtsp://" + serviceIP().toString() + ":8554/audio1\",";
++    json += "\"stream2_url_ip\":\"rtsp://" + serviceIP().toString() + ":8554/audio2\",";
+     json += "\"stream1_url_mdns\":\"rtsp://" + mdnsHostname + ".local:8554/audio1\",";
+     json += "\"stream2_url_mdns\":\"rtsp://" + mdnsHostname + ".local:8554/audio2\",";
+     json += "\"stream1_target\":" + String((uint32_t)streamProfiles[0].target) + ",";
+diff --git a/esp32-birdnet-mic/esp32-birdnet-mic.ino b/esp32-birdnet-mic/esp32-birdnet-mic.cpp
+similarity index 98%
+rename from esp32-birdnet-mic/esp32-birdnet-mic.ino
+rename to esp32-birdnet-mic/esp32-birdnet-mic.cpp
+index d5ba919..feab9e6 100644
+--- a/esp32-birdnet-mic/esp32-birdnet-mic.ino
++++ b/esp32-birdnet-mic/esp32-birdnet-mic.cpp
+@@ -1,3 +1,4 @@
++#include <Arduino.h>
+ #include <WiFi.h>
+ #include <esp_wifi.h>
+ #include <WiFiManager.h>
+@@ -22,6 +23,24 @@
+ #include "freertos/task.h"
+ #include "freertos/ringbuf.h"
+ #include "WebUI.h"
++#include <ESP32Tailnet.h>
++
++#if __has_include("TailnetSecrets.h")
++#include "TailnetSecrets.h"
++#endif
++#ifndef TAILNET_AUTH_KEY
++#define TAILNET_AUTH_KEY ""
++#endif
++#ifndef TAILNET_HOSTNAME
++#define TAILNET_HOSTNAME "birdnet-mic"
++#endif
++
++// Arduino's .ino preprocessor previously generated these forward declarations.
++void applyMdnsSetting();
++uint32_t computeRecommendedMinRate();
++bool restartI2S();
++void stopAudioProducer();
++bool setup_i2s_driver();
+ 
+ // ================== SETTINGS (ESP32 RTSP Mic for BirdNET-Go / BirdNET-Pi) ==================
+ #define FW_VERSION "1.22"
+@@ -30,6 +49,39 @@ const char* FW_VERSION_STR = FW_VERSION;
+ // Build timestamp for diagnostics (compile time)
+ const char* FW_BUILD_DATE_STR = __DATE__ " " __TIME__;
+ 
++ESP32Tailnet tailnet;
++
++IPAddress serviceIP() {
++    return tailnet.serviceIP(WiFi.localIP());
++}
++
++static void onTailnetEvent(ESP32Tailnet &instance,
++                           esp32_tailnet_event_t event,
++                           const esp32_tailnet_status_t &status,
++                           void *) {
++    if (event != ESP32_TAILNET_EVENT_CONNECTED) return;
++    Serial.println("Tailnet ready: rtsp://" + instance.localIP().toString() +
++                   ":8554/audio1");
++    if (status.node_key_expiry > 0) {
++        Serial.println("Tailnet: disable node-key expiry for this unattended mic");
++    }
++}
++
++static void startTailnet() {
++    if (TAILNET_AUTH_KEY[0] == '\0') {
++        Serial.println("Tailnet: no auth key compiled; trying stored identity");
++    }
++    tailnet.onEvent(onTailnetEvent);
++    ESP32Tailnet::Config config;
++    config.authKey = TAILNET_AUTH_KEY[0] == '\0' ? nullptr : TAILNET_AUTH_KEY;
++    config.hostname = TAILNET_HOSTNAME;
++    config.clientVersion = "esp32-tailnet-birdnet/0.1.0";
++    config.maxPeers = 4;
++    if (!tailnet.begin(config)) {
++        Serial.println("Tailnet: startup failed; LAN services remain available");
++    }
++}
++
+ #if defined(M5STACK_ATOM_VOICES3R)
+ #define XIAO_BOARD_ID "m5stack-atom-voices3r"
+ #define XIAO_BOARD_NAME "M5Stack Atom VoiceS3R (C126)"
+@@ -799,7 +851,7 @@ static String mqttBuildDeviceJson() {
+     json += "\"mdl\":\"" + mqttJsonEscape(String(FW_BOARD_NAME_STR)) + "\",";
+     json += "\"mf\":\"Sukecz\",";
+     json += "\"sw\":\"" + mqttJsonEscape(String(FW_VERSION_STR)) + "\",";
+-    json += "\"cu\":\"http://" + mqttJsonEscape(WiFi.localIP().toString()) + "/\"";
++    json += "\"cu\":\"http://" + mqttJsonEscape(serviceIP().toString()) + "/\"";
+     json += "}";
+     return json;
+ }
+@@ -842,7 +894,8 @@ static String mqttBuildStateJson() {
+     json += "\"fw_build\":\"" + mqttJsonEscape(String(FW_BUILD_DATE_STR)) + "\",";
+     json += "\"reboot_reason\":\"" + mqttJsonEscape(rebootReason) + "\",";
+     json += "\"restart_counter\":" + String(restartCounter) + ",";
+-    json += "\"ip\":\"" + mqttJsonEscape(WiFi.localIP().toString()) + "\",";
++    json += "\"ip\":\"" + mqttJsonEscape(serviceIP().toString()) + "\",";
++    json += "\"lan_ip\":\"" + mqttJsonEscape(WiFi.localIP().toString()) + "\",";
+     json += "\"wifi_ssid\":\"" + mqttJsonEscape(WiFi.SSID()) + "\",";
+     json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
+     json += "\"wifi_reconnect_count\":" + String(wifiReconnectCount) + ",";
+@@ -855,8 +908,8 @@ static String mqttBuildStateJson() {
+     json += "\"stream_uptime_s\":" + String(streamUptimeSeconds) + ",";
+     json += "\"client_count\":" + String((uint32_t)clientCount) + ",";
+     json += "\"current_rate_pkt_s\":" + String(currentRate) + ",";
+-    json += "\"stream1_url_ip\":\"rtsp://" + mqttJsonEscape(WiFi.localIP().toString()) + ":8554/audio1\",";
+-    json += "\"stream2_url_ip\":\"rtsp://" + mqttJsonEscape(WiFi.localIP().toString()) + ":8554/audio2\",";
++    json += "\"stream1_url_ip\":\"rtsp://" + mqttJsonEscape(serviceIP().toString()) + ":8554/audio1\",";
++    json += "\"stream2_url_ip\":\"rtsp://" + mqttJsonEscape(serviceIP().toString()) + ":8554/audio2\",";
+     json += "\"stream1_url_mdns\":\"rtsp://" + mqttJsonEscape(mdnsHostname) + ".local:8554/audio1\",";
+     json += "\"stream2_url_mdns\":\"rtsp://" + mqttJsonEscape(mdnsHostname) + ".local:8554/audio2\",";
+     json += "\"stream1_enabled\":" + String(streamEnabled[0] ? "true" : "false") + ",";
+@@ -1963,6 +2016,9 @@ void checkWiFiHealth() {
+         wifiReconnectCount++;
+         simplePrintln("WiFi reconnected: " + WiFi.localIP().toString() +
+                       " (count " + String(wifiReconnectCount) + ")");
++        if (tailnet.nativeHandle() != nullptr) {
++            tailnet.rebind();
++        }
+         applyMdnsSetting();
+         if (timeSyncEnabled) {
+             attemptTimeSync(false);
+@@ -2984,7 +3040,7 @@ static void parseTransportHeader(ClientSession &session, const String &request,
+         session.rtcpSocket.begin(session.serverRtpPort + 1);
+         transportResponse = "RTP/AVP/UDP;unicast;client_port=" + String(session.clientRtpPort) + "-" + String(session.clientRtpPort + 1);
+         transportResponse += ";server_port=" + String(session.serverRtpPort) + "-" + String(session.serverRtpPort + 1);
+-        transportResponse += ";source=" + WiFi.localIP().toString();
++        transportResponse += ";source=" + serviceIP().toString();
+         transportResponse += ";ssrc=" + String(rtpSSRC, HEX);
+     } else {
+         session.transport = TRANSPORT_TCP;
+@@ -3029,7 +3085,7 @@ void handleRTSPCommand(ClientSession &session, String request, uint8_t clientIdx
+         session.client.print("Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN, GET_PARAMETER\r\n\r\n");
+ 
+     } else if (request.startsWith("DESCRIBE")) {
+-        String ip = WiFi.localIP().toString();
++        String ip = serviceIP().toString();
+         String streamPath = (session.profileIndex == 1) ? "/audio2" : "/audio1";
+         String sdp = "v=0\r\n";
+         sdp += "o=- 0 0 IN IP4 " + ip + "\r\n";
+@@ -3058,7 +3114,7 @@ void handleRTSPCommand(ClientSession &session, String request, uint8_t clientIdx
+         session.client.print("Transport: " + transportResponse + "\r\n\r\n");
+ 
+     } else if (request.startsWith("PLAY")) {
+-        String ip = WiFi.localIP().toString();
++        String ip = serviceIP().toString();
+         String streamPath = (session.profileIndex == 1) ? "/audio2" : "/audio1";
+         session.client.print("RTSP/1.0 200 OK\r\n");
+         session.client.print("CSeq: " + cseq + "\r\n");
+@@ -3341,6 +3397,7 @@ void setup() {
+     }
+ 
+     simplePrintln("WiFi connected: " + WiFi.localIP().toString());
++    startTailnet();
+     logConnectedAp("initial");
+     clearStoredBssidPin();
+ 
+@@ -3410,8 +3467,8 @@ void setup() {
+ 
+     if (!overheatLatched && rtspServerEnabled) {
+         simplePrintln("RTSP server ready on port 8554");
+-        simplePrintln("RTSP URL1 (IP): rtsp://" + WiFi.localIP().toString() + ":8554/audio1");
+-        simplePrintln("RTSP URL2 (IP): rtsp://" + WiFi.localIP().toString() + ":8554/audio2");
++        simplePrintln("RTSP URL1 (service): rtsp://" + serviceIP().toString() + ":8554/audio1");
++        simplePrintln("RTSP URL2 (service): rtsp://" + serviceIP().toString() + ":8554/audio2");
+         if (mdnsEnabled) {
+             simplePrintln("RTSP URL1 (mDNS): rtsp://" + mdnsHostname + ".local:8554/audio1");
+             simplePrintln("RTSP URL2 (mDNS): rtsp://" + mdnsHostname + ".local:8554/audio2");
+@@ -3422,7 +3479,7 @@ void setup() {
+     } else {
+         simplePrintln("RTSP server paused by stream schedule. It will resume in the next allowed window.");
+     }
+-    simplePrintln("Web UI: http://" + WiFi.localIP().toString() + "/");
++    simplePrintln("Web UI: http://" + serviceIP().toString() + "/");
+     if (mqttEnabled) {
+         simplePrintln("MQTT: enabled (" + mqttHost + ":" + String(mqttPort) +
+                       "), topic " + mqttTopicPrefix +
+diff --git a/esp32-birdnet-mic/idf_component.yml b/esp32-birdnet-mic/idf_component.yml
+new file mode 100644
+index 0000000..a00cb81
+--- /dev/null
++++ b/esp32-birdnet-mic/idf_component.yml
+@@ -0,0 +1,3 @@
++dependencies:
++  esp32_tailnet_arduino:
++    path: ../external/esp32-tailnet/components/esp32_tailnet_arduino
+diff --git a/platformio.ini b/platformio.ini
+index da17f4d..1ca17ad 100644
+--- a/platformio.ini
++++ b/platformio.ini
+@@ -4,7 +4,7 @@ src_dir = esp32-birdnet-mic
+ [env:m5stack-atom-voices3r]
+ platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.38/platform-espressif32.zip
+ board = m5stack-atoms3r
+-framework = arduino
++framework = arduino, espidf
+ monitor_speed = 115200
+ upload_speed = 921600
+ build_flags =
+diff --git a/sdkconfig.defaults b/sdkconfig.defaults
+new file mode 100644
+index 0000000..62a1e62
+--- /dev/null
++++ b/sdkconfig.defaults
+@@ -0,0 +1,27 @@
++CONFIG_AUTOSTART_ARDUINO=y
++CONFIG_FREERTOS_HZ=1000
++CONFIG_COMPILER_OPTIMIZATION_SIZE=y
++CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
++CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
++CONFIG_LWIP_IPV4=y
++CONFIG_LWIP_IPV6=y
++CONFIG_LWIP_IP4_FRAG=y
++CONFIG_LWIP_IP4_REASSEMBLY=y
++CONFIG_LWIP_MAX_SOCKETS=32
++CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
++CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
++CONFIG_MBEDTLS_CHACHAPOLY_C=y
++CONFIG_MBEDTLS_CHACHA20_C=y
++CONFIG_MBEDTLS_POLY1305_C=y
++CONFIG_MBEDTLS_HKDF_C=y
++CONFIG_ML_ENABLE_CONFIG_HTTPD=n
++CONFIG_ML_MAX_PEERS=4
++CONFIG_ML_H2_BUFFER_SIZE_KB=128
++CONFIG_ML_JSON_BUFFER_SIZE_KB=128
++CONFIG_SPIRAM=y
++CONFIG_SPIRAM_TYPE_AUTO=y
++CONFIG_SPIRAM_MODE_OCT=y
++CONFIG_SPIRAM_SPEED_80M=y
++CONFIG_SPIRAM_USE_MALLOC=y
++CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
++CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768

@@ -1,0 +1,9 @@
+version: "0.5.14-esp32-tailnet.1"
+description: "Pinned MicroLink snapshot used by esp32-tailnet"
+license: "MIT"
+dependencies:
+  idf: ">=5.3,<6.0"
+  wireguard_lwip:
+    path: ../wireguard_lwip
+    require: private
+

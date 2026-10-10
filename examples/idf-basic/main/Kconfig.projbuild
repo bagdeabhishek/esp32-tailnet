@@ -1,0 +1,17 @@
+menu "ESP32 Tailnet example"
+    config EXAMPLE_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+
+    config EXAMPLE_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+
+    config EXAMPLE_TAILNET_AUTH_KEY
+        string "Tailnet enrollment auth key"
+        default ""
+
+    config EXAMPLE_TAILNET_HOSTNAME
+        string "Tailnet hostname"
+        default "esp32-tailnet"
+endmenu
