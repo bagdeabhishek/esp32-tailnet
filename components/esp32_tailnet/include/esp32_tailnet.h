@@ -134,6 +134,8 @@ void esp32_tailnet_destroy(esp32_tailnet_t *tailnet);
 /**
  * Erase only MicroLink's device identity and peer cache from NVS.
  * Call after NVS initialization and before creating any tailnet instance.
+ * Ordinary stop, destroy, reboot, OTA, and application settings resets leave
+ * the stored identity intact.
  */
 esp_err_t esp32_tailnet_factory_reset(void);
 

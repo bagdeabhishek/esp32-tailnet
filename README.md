@@ -107,6 +107,17 @@ Call `tailnet.rebind()` after Wi-Fi reconnects or switches access points. It
 preserves the node identity while reopening the control, DERP, STUN, and peer
 paths.
 
+The generated device identity is persisted in NVS and survives ordinary
+reboots, OTA updates, uplink changes, `end()`, and application settings resets.
+Erase it only as an explicit user action, after stopping the instance:
+
+```cpp
+tailnet.end();
+if (ESP32Tailnet::clearStoredIdentity()) {
+  ESP.restart();  // the next boot requires authorization again
+}
+```
+
 ## Examples
 
 - [`examples/arduino-basic`](examples/arduino-basic) starts an HTTP server on
@@ -147,6 +158,8 @@ number of nodes in the tailnet. Keep it small on constrained hardware and use
 - Disable node-key expiry for unattended microphones, or plan a renewal path.
 - Tailnet reachability is not application authentication. Keep OTA, Web UI, and
   management endpoints protected according to your threat model.
+- Treat identity clearing as a destructive, confirmed UI action. It removes
+  only ESP32 Tailnet's keys and cached peers, not Wi-Fi or application settings.
 - A relay path is expected when direct UDP cannot be established. The status API
   exposes direct and relayed peer counts.
 - This package provides a node interface. It is not an exit node, subnet router,

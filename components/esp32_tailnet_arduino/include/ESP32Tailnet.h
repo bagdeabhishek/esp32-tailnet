@@ -66,6 +66,15 @@ class ESP32Tailnet {
     handle_ = nullptr;
   }
 
+  /**
+   * Explicitly erase the persisted Tailnet device identity and peer cache.
+   * The instance must be stopped with end() before calling this method.
+   * Ordinary reboot, OTA, end(), and BirdNET settings reset do not erase it.
+   */
+  static bool clearStoredIdentity() {
+    return esp32_tailnet_factory_reset() == ESP_OK;
+  }
+
   /** Call after Wi-Fi reconnects or changes upstream networks. */
   bool rebind() {
     return handle_ != nullptr && esp32_tailnet_rebind(handle_) == ESP_OK;

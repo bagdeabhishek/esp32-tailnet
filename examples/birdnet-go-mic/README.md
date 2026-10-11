@@ -9,7 +9,12 @@ address.
 The integration has been compiled and flashed on an M5Stack Atom VoiceS3R
 against pioarduino `55.03.38`, ESP-IDF 5.5.4, and Arduino 3.3.8. The resulting
 image uses approximately 1.49 MB flash and 59 KB static RAM before runtime
-buffers. HTTP, 48 kHz I2S capture, and RTSP OPTIONS were verified on hardware.
+buffers. Browser authorization and identity persistence across an OTA reboot
+were verified: the board reconnected with the same tailnet address and no new
+login prompt. HTTP, 48 kHz I2S capture, and RTSP OPTIONS were verified over the
+LAN. End-to-end service checks over the `100.x.y.z` address require an
+authorized Tailscale peer; the isolated build environment used here had no
+Tailscale interface or `100.x` route.
 
 ## Apply it
 
@@ -28,7 +33,10 @@ pio run -e m5stack-atom-voices3r
 
 Open the microphone's LAN Web UI, choose **Tailscale**, and click **Authorize
 with Tailscale**. The page polls until the node receives its `100.x.y.z`
-address. No auth key needs to be compiled into the image.
+address. No auth key needs to be compiled into the image. Enrollment survives
+reboots, OTA updates, and Wi-Fi changes. The same page provides a separately
+confirmed **Clear Tailscale identity** action when re-enrollment is intentional;
+it does not clear Wi-Fi or BirdNET settings.
 
 For fleet or fully unattended provisioning, copy `TailnetSecrets.h.example` to
 the ignored `TailnetSecrets.h` and supply a temporary auth key. Do not put auth
@@ -43,6 +51,8 @@ keys in `platformio.ini`, committed headers, build logs, or issue reports.
 - starts the tailnet after Wi-Fi provisioning succeeds;
 - exposes a keyless browser authorization flow at `/tailscale` and status JSON
   at `/api/tailnet`;
+- exposes explicit identity removal at `POST /api/tailnet/clear`, protected by
+  the firmware's mutation-request header;
 - calls `rebind()` when Wi-Fi reconnects;
 - keeps every server bound normally, preserving LAN access;
 - advertises the tailnet address in the Web UI, MQTT discovery, RTSP SDP,
