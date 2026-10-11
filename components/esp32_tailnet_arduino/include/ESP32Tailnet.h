@@ -90,6 +90,12 @@ class ESP32Tailnet {
     return connected() ? localIP() : fallback;
   }
 
+  String loginURL() const {
+    esp32_tailnet_status_t current{};
+    if (!status(current) || current.auth_url[0] == '\0') return String();
+    return String(current.auth_url);
+  }
+
   bool status(esp32_tailnet_status_t &out) const {
     return handle_ != nullptr && esp32_tailnet_get_status(handle_, &out) == ESP_OK;
   }

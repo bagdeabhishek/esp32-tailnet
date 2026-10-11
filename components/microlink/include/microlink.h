@@ -263,6 +263,8 @@ typedef struct {
      *   >0 = registered as a real user, name in register_user_name. */
     int      register_user_id;
     char     register_user_name[48];
+    /** Interactive authorization URL, or empty once the node is authorized. */
+    char     auth_url[256];
 
     /* True = every keypair loaded from NVS at boot, so the device has
      * a stable node-key. False = at least one was freshly generated

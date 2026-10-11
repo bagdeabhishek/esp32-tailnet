@@ -1385,6 +1385,8 @@ static cJSON *build_hostinfo(microlink_t *ml) {
     return hostinfo;
 }
 
+#define ML_REGISTER_AUTH_PENDING 1
+
 static int do_register(microlink_t *ml, ml_noise_state_t *noise) {
     int64_t t_reg_start = esp_timer_get_time();
 
@@ -1393,6 +1395,14 @@ static int do_register(microlink_t *ml, ml_noise_state_t *noise) {
     if (!root) return -1;
 
     cJSON_AddNumberToObject(root, "Version", ML_CTRL_PROTOCOL_VER);
+
+    /* Interactive login is a two-step register flow.  The first response
+     * supplies AuthURL; every retry must echo it as Followup so the control
+     * plane keeps the same pending authorization session instead of issuing
+     * a new URL.  This mirrors tailscale/control/controlclient/direct.go. */
+    if (ml->auth_url[0] != '\0') {
+        cJSON_AddStringToObject(root, "Followup", ml->auth_url);
+    }
 
     /* NodeKey: "nodekey:" + hex(wg_public_key) */
     char key_hex[65];
@@ -1683,9 +1693,13 @@ static int do_register(microlink_t *ml, ml_noise_state_t *noise) {
 
         cJSON *url_j = cJSON_GetObjectItem(resp_json, "AuthURL");
         if (url_j && cJSON_IsString(url_j) && url_j->valuestring && *url_j->valuestring) {
+            strlcpy(ml->auth_url, url_j->valuestring, sizeof ml->auth_url);
             ESP_LOGW(TAG, "RegisterResponse.AuthURL set - authorization is pending. "
                           "Approve this node at: %s", url_j->valuestring);
+            cJSON_Delete(resp_json);
+            return ML_REGISTER_AUTH_PENDING;
         }
+        ml->auth_url[0] = '\0';
 
         /* Identity, for logging only. ID from User, name from Login (with the
          * User.DisplayName override applied if present) - as the reference does. */
@@ -3857,11 +3871,20 @@ void ml_coord_task(void *arg) {
 
         case COORD_REGISTER:
             ESP_LOGI(TAG, "Registering...");
-            if (do_register(ml, &noise) < 0) {
-                ESP_LOGE(TAG, "Registration failed");
-                ml_conn_close(ml);
-                state = COORD_RECONNECTING;
-                break;
+            {
+                int register_rc = do_register(ml, &noise);
+                if (register_rc == ML_REGISTER_AUTH_PENDING) {
+                    ESP_LOGI(TAG, "Waiting for interactive authorization before retrying registration");
+                    ml_conn_close(ml);
+                    state = COORD_RECONNECTING;
+                    break;
+                }
+                if (register_rc < 0) {
+                    ESP_LOGE(TAG, "Registration failed");
+                    ml_conn_close(ml);
+                    state = COORD_RECONNECTING;
+                    break;
+                }
             }
             state = COORD_FETCH_PEERS;
             break;

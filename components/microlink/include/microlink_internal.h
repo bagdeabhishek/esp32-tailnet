@@ -495,6 +495,10 @@ struct microlink_s {
      *   >0 = a real user; register_user_name holds the display name */
     int  register_user_id;
     char register_user_name[48];
+    /* Non-empty while the control plane is waiting for the owner to approve
+     * this node. Kept in the core so any host firmware can surface the URL in
+     * its own UI without depending on MicroLink's optional HTTP server. */
+    char auth_url[256];
 
     /* Event group (cross-task synchronization) */
     EventGroupHandle_t events;

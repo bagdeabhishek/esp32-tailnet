@@ -769,6 +769,7 @@ esp_err_t microlink_get_diag(const microlink_t *ml, microlink_diag_t *out) {
     out->register_user_id = ml->register_user_id;
     strlcpy(out->register_user_name, ml->register_user_name,
             sizeof out->register_user_name);
+    strlcpy(out->auth_url, ml->auth_url, sizeof out->auth_url);
     out->identity_persistent = ml->identity_persistent;
     /* First 16 hex chars of the WG public key (= 8 bytes). Enough to
      * eyeball-match against `headscale nodes list` output. */

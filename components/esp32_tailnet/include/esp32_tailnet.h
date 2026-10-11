@@ -64,6 +64,8 @@ typedef struct {
     int64_t node_key_expiry;    /**< Unix epoch seconds; 0 means unknown or disabled. */
     bool identity_persistent;
     char identity_key_prefix[17];
+    /** Browser URL for interactive node authorization; empty when not needed. */
+    char auth_url[256];
 } esp32_tailnet_status_t;
 
 typedef void (*esp32_tailnet_event_cb_t)(esp32_tailnet_t *tailnet,

@@ -10,11 +10,13 @@
 #define WIFI_PASSWORD "replace-me"
 #endif
 #ifndef TAILNET_AUTH_KEY
-#define TAILNET_AUTH_KEY "replace-with-auth-key"
+#define TAILNET_AUTH_KEY ""
 #endif
 
 ESP32Tailnet tailnet;
 WiFiServer server(8080);
+String lastLoginURL;
+unsigned long lastLoginCheckMs = 0;
 
 static void onWiFiEvent(arduino_event_id_t event, arduino_event_info_t) {
   if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP && tailnet.nativeHandle() != nullptr) {
@@ -43,7 +45,7 @@ void setup() {
 
   tailnet.onEvent(onTailnetEvent);
   ESP32Tailnet::Config config;
-  config.authKey = TAILNET_AUTH_KEY;
+  config.authKey = TAILNET_AUTH_KEY[0] == '\0' ? nullptr : TAILNET_AUTH_KEY;
   config.hostname = "esp32-tailnet-demo";
   config.maxPeers = 4;
 
@@ -56,6 +58,15 @@ void setup() {
 }
 
 void loop() {
+  if (!tailnet.connected() && millis() - lastLoginCheckMs >= 2000) {
+    lastLoginCheckMs = millis();
+    String login = tailnet.loginURL();
+    if (login.length() && login != lastLoginURL) {
+      lastLoginURL = login;
+      Serial.printf("Authorize this node: %s\n", login.c_str());
+    }
+  }
+
   WiFiClient client = server.accept();
   if (client) {
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"

@@ -142,7 +142,9 @@ esp_err_t esp32_tailnet_start(esp32_tailnet_t *tailnet) {
     if (tailnet->ml != nullptr) return ESP_ERR_INVALID_STATE;
 
     microlink_config_t config{};
-    config.auth_key = tailnet->auth_key;
+    /* An empty key asks the control plane for an interactive AuthURL.  A
+     * non-null pointer is required by MicroLink even for that flow. */
+    config.auth_key = tailnet->auth_key != nullptr ? tailnet->auth_key : "";
     config.device_name = tailnet->hostname;
     config.ctrl_host = tailnet->control_url;
     config.ipn_version = tailnet->client_version;
@@ -252,6 +254,8 @@ esp_err_t esp32_tailnet_get_status(const esp32_tailnet_t *tailnet,
     out_status->identity_persistent = diag.identity_persistent;
     std::strncpy(out_status->identity_key_prefix, diag.identity_pubkey_prefix,
                  sizeof(out_status->identity_key_prefix) - 1);
+    std::strncpy(out_status->auth_url, diag.auth_url,
+                 sizeof(out_status->auth_url) - 1);
 
     for (int i = 0; i < diag.peer_count; ++i) {
         microlink_peer_info_t peer{};

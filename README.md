@@ -40,8 +40,8 @@ change cannot silently break every consuming firmware.
 - ESP32-S3 with PSRAM is the primary target. The M5Stack Atom VoiceS3R
   (8 MB flash, 8 MB PSRAM) is the reference board.
 - An ordinary Wi-Fi or Ethernet connection with Internet access.
-- A Tailscale auth key for first enrollment, or a compatible Headscale control
-  server.
+- A Tailscale account, or a compatible Headscale control server. First
+  enrollment can use a browser authorization URL; an auth key remains optional.
 
 The default HTTP/2 and JSON workspaces reserve 128 KiB each, so PSRAM is a
 practical requirement for applications such as audio streaming.
@@ -77,12 +77,24 @@ ESP32Tailnet tailnet;
 
 void startTailnet() {
   ESP32Tailnet::Config config;
-  config.authKey = TAILNET_AUTH_KEY;
   config.hostname = "forest-mic";
   config.maxPeers = 4;
   tailnet.begin(config);
 }
 ```
+
+With no auth key, the control plane returns an interactive login URL. Expose it
+through whatever UI the host firmware already has:
+
+```cpp
+String login = tailnet.loginURL();
+if (login.length()) {
+  // Render a link or QR code; never hard-code a web-server dependency here.
+}
+```
+
+This is the default BirdNET hero flow. Supplying `config.authKey` is still
+supported for unattended fleet provisioning and CI/manufacturing workflows.
 
 Keep servers bound to all interfaces. When publishing a URL or an SDP address,
 prefer the overlay address:
@@ -116,6 +128,7 @@ The core API lives in
 - create/start/rebind/stop/destroy lifecycle;
 - connection and peer-change callbacks;
 - current tailnet, public, DERP, peer, and key-expiry diagnostics;
+- interactive authorization URL reporting without owning an application UI;
 - peer enumeration and direct-versus-relayed status;
 - factory reset of the persisted node identity;
 - Tailscale SaaS or a custom Headscale-compatible control URL.
@@ -129,8 +142,8 @@ number of nodes in the tailnet. Keep it small on constrained hardware and use
 
 ## Operational and security notes
 
-- Use a tagged, short-lived or one-time auth key. Revoke it after enrollment
-  when your control-plane policy allows that workflow.
+- Prefer browser authorization for one-off devices. For fleet enrollment, use a
+  tagged, short-lived or one-time auth key and revoke it after provisioning.
 - Disable node-key expiry for unattended microphones, or plan a renewal path.
 - Tailnet reachability is not application authentication. Keep OTA, Web UI, and
   management endpoints protected according to your threat model.
